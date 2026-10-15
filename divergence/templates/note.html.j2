@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DIVERGENCE — {{ company }} — Research Note</title>
+<style>
+  @page { size: A4; margin: 13mm 14mm 12mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "DejaVu Sans", "Liberation Sans", Arial, sans-serif; font-size: 9.3pt; line-height: 1.4; color: #1a1a1a; margin: 0; }
+  h1 { font-size: 17pt; margin: 0; color: #0d2440; }
+  h2 { font-size: 11pt; margin: 11pt 0 3.5pt 0; color: #0d2440; border-bottom: 1.2pt solid #0d2440; padding-bottom: 1.5pt; }
+  h2 .n { color: #b07d10; }
+  p { margin: 0 0 4pt 0; text-align: justify; }
+  ul { margin: 0 0 4pt 0; padding-left: 13pt; }
+  li { margin-bottom: 2pt; text-align: justify; }
+  b, strong { color: #0d2440; }
+  a { color: #0d4f8b; text-decoration: none; word-break: break-all; }
+  .head { border-bottom: 2.8pt solid #0d2440; padding-bottom: 5pt; }
+  .kicker { font-size: 7.8pt; letter-spacing: 1.6px; color: #7a5b00; font-weight: bold; }
+  .sub { font-size: 9.3pt; color: #444; margin-top: 2pt; }
+  .meta { float: right; text-align: right; font-size: 8.6pt; color: #333; line-height: 1.5; }
+  .discovery { background: #0d2440; color: #fff; padding: 7pt 9pt; margin: 7pt 0 3pt 0; font-size: 10.6pt; line-height: 1.45; }
+  .discovery b { color: #f0c040; }
+  .strengthline { font-size: 8.8pt; color: #333; margin: 2pt 0 0 0; }
+  .badge { display: inline-block; padding: 0.5pt 5pt; border-radius: 2pt; font-size: 8.4pt; font-weight: bold; color: #fff; vertical-align: middle; }
+  .bs { background: #1e7d32; } .bm { background: #b07d10; } .bw { background: #9e2b25; }
+  table { border-collapse: collapse; width: 100%; margin: 3pt 0 5pt 0; font-size: 8.8pt; }
+  th { background: #0d2440; color: #fff; text-align: right; padding: 2.4pt 5pt; }
+  th:first-child { text-align: left; }
+  td { border-bottom: .5pt solid #c9d2dd; padding: 2pt 5pt; text-align: right; }
+  td:first-child { text-align: left; }
+  tr:nth-child(even) td { background: #f5f7fa; }
+  .flag { color: #9e2b25; font-weight: bold; }
+  .box { border: .9pt solid #0d2440; background: #fbfcfe; padding: 5pt 8pt; margin: 3pt 0 5pt 0; }
+  .fals { border-color: #9e2b25; background: #fdf7f7; }
+  .ev { font-size: 8.9pt; }
+  .ev li { margin-bottom: 3.5pt; }
+  .cls { display: inline-block; background: #e8eef5; border: .6pt solid #0d2440; border-radius: 2pt; padding: 0 3.5pt; font-size: 7.4pt; font-weight: bold; color: #0d2440; }
+  .src { color: #555; font-size: 8.2pt; }
+  img.chart { width: 100%; margin: 2pt 0; }
+  .small { font-size: 8.4pt; color: #444; }
+  .foot { border-top: .8pt solid #0d2440; margin-top: 8pt; padding-top: 3pt; font-size: 8pt; color: #555; text-align: justify; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="meta"><b>Run:</b> {{ run_stamp }}<br><b>Track:</b> {{ track }}<br><b>Participant:</b> Mrityunjay Mishra</div>
+  <div class="kicker">DIVERGENCE — AUTONOMOUS FINANCIAL RESEARCH AGENT · MVP RUN</div>
+  <h1>{{ company }}</h1>
+  <div class="sub">NSE: {{ scrip }} · Yahoo: {{ ticker }} · Panel: {{ window }} · Finding the Next Signal — ATMOS 2026</div>
+</div>
+
+<div class="discovery"><b>THE DISCOVERY —</b> {{ discovery }}</div>
+<p class="strengthline"><b>Evidence strength:</b> <span class="badge {{ strength_class }}">{{ strength | upper }}</span> — {{ strength_reason }}</p>
+
+<h2><span class="n">1</span>&nbsp; WHY IT MATTERS</h2>
+<ul>
+{% for w in why %}<li>{{ w }}</li>
+{% endfor %}
+</ul>
+
+<h2><span class="n">2</span>&nbsp; NUMBERS — {{ pair_title }}</h2>
+<img class="chart" src="{{ chart }}">
+<table>
+  <thead><tr><th>Quarter</th><th>Gross NPA %</th><th>Net NPA %</th><th>Implied PCR %</th><th>NII (Rs cr)</th><th>Net profit (Rs cr)</th></tr></thead>
+  <tbody>
+{% for r in num_rows %}  <tr><td>{{ r.q }}{% if r.one_off %} <span class="flag">†</span>{% endif %}</td><td>{{ r.gnpa }}</td><td>{{ r.nnpa }}</td><td>{{ r.pcr }}</td><td>{{ r.nii }}</td><td>{{ r.pat }}</td></tr>
+{% endfor %}
+  </tbody>
+</table>
+<p class="small">Implied provision coverage (PCR) = (GNPA − NNPA) / GNPA, computed by the engine from the reported ratio pair; it approximates the disclosed PCR (technical write-offs are excluded from disclosed PCR, so small gaps are expected). Persistence of the winning divergence: <b>{{ persistence }} quarters</b>; engine score <b>{{ score }}</b> (persistence × |drift| / σ). {{ band_note }}
+{% if one_off_quarters %} <span class="flag">†</span> One-off-flagged quarters (expense/other-income outliers, excluded as persistence evidence for flow-based pairs): {{ one_off_quarters | join(", ") }}.{% endif %}</p>
+{% if runners_up %}
+<p class="small"><b>Also flagged by the scan (not headlined):</b>
+{% for r in runners_up %}{{ r.title }} — persistence {{ r.persistence }} qtrs, score {{ r.score }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>
+{% endif %}
+{% if funding %}
+<p class="small"><b>Funding-mix context (annual, Screener balance sheet):</b>
+{% for f in funding %}{{ f.year }}: borrowings were {{ f.ratio }}% of deposits{% if not loop.last %}; {% endif %}{% endfor %} — the inherited wholesale funding of the merger is being worked down as deposits compound.</p>
+{% endif %}
+
+<h2><span class="n">3</span>&nbsp; TIMELINE — WHEN THE RELATIONSHIP BROKE</h2>
+<table>
+  <tbody>
+{% for q, txt in timeline %}  <tr><td style="width:16%"><b>{{ q }}</b></td><td style="text-align:left">{{ txt }}</td></tr>
+{% endfor %}
+  </tbody>
+</table>
+
+<h2><span class="n">4</span>&nbsp; EVIDENCE — AUDITABLE TRAIL</h2>
+<ul class="ev">
+{% for e in evidence %}<li><span class="cls">{{ e.source_class }}</span> <b>{{ e.claim }}</b><br>
+<span class="src">{{ e.source }} — <a href="{{ e.url }}">{{ e.url }}</a></span><br>{{ e.detail }}</li>
+{% endfor %}
+</ul>
+
+<h2><span class="n">5</span>&nbsp; COUNTERARGUMENT — THE STRONGEST CASE AGAINST</h2>
+<div class="box"><p style="margin:0">{{ counterargument }}</p></div>
+
+<h2><span class="n">6</span>&nbsp; FALSIFICATION CONDITION</h2>
+<div class="box fals"><p style="margin:0">{{ falsification }}</p></div>
+
+<div class="foot"><b>Method &amp; scope (MVP):</b> one pipeline run on one Track A company, produced end-to-end by the code in this repository — panel built from public Screener.in renders of the statutory results (standalone basis; the Jun-2023 pre-merger quarter is excluded as a structural break), cross-checked against independent filing coverage; Yahoo Finance price history is fetched as market context only. The full system (filing-PDF parsing, peer panel, every Track A company) is the finals build described in the Round 1 report. All figures are reproducible from the committed panel CSV. This note is a research hypothesis with a stated falsification condition — <b>not investment advice</b>.</div>
+
+</body>
+</html>

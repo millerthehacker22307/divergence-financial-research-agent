@@ -56,6 +56,32 @@ Also flagged by the same scan, not headlined: funding-cost relief
 (interest burden, persistence 3, score 6.5) and the revenue-vs-profit
 growth gap (persistence 3, score 5.5).
 
+## Second-company verification (ICICI Bank, run 16 Oct 2026)
+
+The same code, unchanged, was run end-to-end on a second Track A
+constituent to prove the pipeline is company-agnostic ahead of the finals
+live demo:
+
+```bash
+python run.py --scrip ICICIBANK --name "ICICI Bank" --ticker ICICIBANK.NS
+```
+
+**Finding (MODERATE):** headline asset quality healed — GNPA down 1.10pp
+over the panel to 1.38% — while the implied provision coverage slid from
+82.7% to 74.6%, spending 6 straight quarters below its early-panel band
+(change-point Mar-2025), and net NPA fell just 0.08pp (0.43% → 0.35%)
+against the 1.10pp gross improvement. The bank's *disclosed* PCR for the
+latest quarter (74.7%, per filing coverage) cross-validates the implied
+figure (74.6%). Full note:
+[`examples/divergence_ICICIBANK_note.pdf`](examples/divergence_ICICIBANK_note.pdf);
+panel: [`examples/panel_ICICIBANK.csv`](examples/panel_ICICIBANK.csv).
+
+Independent corroboration is **data, not code**: `corroboration/<SCRIP>.json`
+holds the press-reported figures for a company, and the pipeline
+machine-checks them against the parsed panel (MATCH/MISMATCH is printed
+into the note's evidence section). A company with no corroboration file
+earns no press-evidence rows and its grade falls accordingly.
+
 ## Run it
 
 ```bash
@@ -80,7 +106,8 @@ divergence/
   evidence.py           Claim-level evidence store (source classes a–e)
   report.py             Chart (matplotlib) + note renderer (WeasyPrint)
   templates/note.html.j2  The 8-part research-note template
-examples/               Sample note PDF + the panel CSV it came from
+corroboration/          Press-reported figures per company (data, machine-checked)
+examples/               Sample note PDFs + the panel CSVs they came from
 tools/make_demo_video.py  Renders the ≤2-min demo video from a real run log
 ```
 

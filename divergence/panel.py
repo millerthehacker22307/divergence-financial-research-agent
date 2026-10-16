@@ -3,10 +3,13 @@
 Conventions
 -----------
 * All money figures are Rs crore, exactly as Screener reports them.
-* The panel window for the MVP is the post-merger entity: HDFC Ltd merged
-  into HDFC Bank on 1 Jul 2023, so the Jun-2023 quarter (old standalone
-  bank) is a structural break and is excluded; the panel is the 12 quarters
-  Sep-2023 .. Jun-2026.
+* The panel window is generic: the most recent PANEL_QUARTERS quarters of
+  the standalone results, whatever company is being run. (For HDFC Bank
+  this window happens to start at Sep-2023, the first full quarter of the
+  merged entity -- the Jun-2023 pre-merger quarter drops out of the window
+  on its own, which is what the Round 1 note documents.) Structural breaks
+  inside the window are handled by the mechanical one-off flags below,
+  never by company-specific date edits.
 * Derived metrics are computed here, deterministically -- nothing downstream
   (and no language model) ever computes a number.
 """
@@ -15,7 +18,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-POST_MERGER_START = pd.Timestamp("2023-09-30")
+PANEL_QUARTERS = 12
 
 COLMAP = {
     "revenue": "revenue",
@@ -34,7 +37,7 @@ def build_panel(standalone_quarterly: pd.DataFrame) -> pd.DataFrame:
     q = standalone_quarterly.rename(columns=COLMAP)
     keep = [c for c in COLMAP.values() if c in q.columns]
     panel = q[keep].copy()
-    panel = panel[panel.index >= POST_MERGER_START].sort_index()
+    panel = panel.sort_index().tail(PANEL_QUARTERS)
 
     panel["nii"] = panel["revenue"] - panel["interest_expense"]
     panel["interest_burden_pct"] = 100.0 * panel["interest_expense"] / panel["revenue"]
@@ -54,10 +57,10 @@ def build_panel(standalone_quarterly: pd.DataFrame) -> pd.DataFrame:
 def _flag_one_offs(panel: pd.DataFrame) -> pd.Series:
     """Flag quarters whose expense / other-income lines are extreme outliers.
 
-    Mar-2024 (floating-provision build) and Jun-2025 (stake-sale gain in
-    other income + elevated provisions) are the known cases in this window;
-    the rule is mechanical so it generalises: a line > 1.4x the panel median
-    of that line marks the quarter as one-off contaminated.
+    The rule is purely mechanical so it generalises to any company: a line
+    > 1.4x the panel median of that line marks the quarter as one-off
+    contaminated (provision builds, stake-sale gains and similar items all
+    surface this way in the expense / other-income lines).
     """
     flags = pd.Series(False, index=panel.index)
     for col in ("expenses", "other_income"):

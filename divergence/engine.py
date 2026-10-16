@@ -85,7 +85,9 @@ def detect_asset_quality(panel: pd.DataFrame) -> Divergence:
 
 def detect_growth_gap(panel: pd.DataFrame) -> Divergence:
     gap = (panel["net_profit_yoy_pct"] - panel["revenue_yoy_pct"]).dropna()
-    gap = gap[gap.index >= pd.Timestamp("2024-09-30")]  # clean post-merger YoY
+    # YoY needs a full year of panel history, so the first valid YoY point is
+    # the fifth panel quarter; dropna() has already removed the rest. No
+    # company-specific window dates are applied here.
     flagged = (gap > 3.0) & (~panel["one_off_flag"].reindex(gap.index).fillna(False))
     persistence, change_point = _longest_run(flagged)
     drift = float(gap.iloc[-3:].mean() - gap.iloc[:3].mean())
@@ -169,81 +171,135 @@ def narrate(panel: pd.DataFrame, div: Divergence, company: str) -> Divergence:
 
 
 def _narrate_asset_quality(panel: pd.DataFrame, div: Divergence, company: str) -> Divergence:
+    """Narrative for the GNPA/NNPA coverage pair.
+
+    Every quantitative claim below is read out of the computed panel, and
+    the directional clauses are chosen by the data (e.g. whether net NPA
+    actually fell over the panel), so the same template is truthful for any
+    bank the engine runs on -- nothing company-specific is written in.
+    """
     g, n, pcr = panel["gnpa_pct"], panel["nnpa_pct"], panel["implied_pcr_pct"]
     first_q, last_q = panel.index[0], panel.index[-1]
     peak_g_q = g.idxmax()
     peak_n_q = n.idxmax()
+    fy_n = n.iloc[:4]                      # first panel year, net NPA
+    early_pcr = pcr.iloc[:4].mean()        # early-panel average coverage
+    g_drop = g.iloc[0] - g.iloc[-1]        # gross improvement over the panel (pp)
+    n_move = n.iloc[-1] - n.iloc[0]        # net movement over the panel (pp)
+    unc_first, unc_last = 100.0 - pcr.iloc[0], 100.0 - pcr.iloc[-1]
+    if n_move >= -0.02:
+        net_clause = (
+            f"while net NPA, at {n.iloc[-1]:.2f}%, has barely moved over the panel "
+            f"({n.iloc[0]:.2f}% at the start; first-year range {fy_n.min():.2f}-"
+            f"{fy_n.max():.2f}%)"
+        )
+    elif abs(n_move) < 0.5 * g_drop:
+        net_clause = (
+            f"and net NPA has improved far less than the gross ratio -- down just "
+            f"{abs(n_move):.2f}pp to {n.iloc[-1]:.2f}% against {g_drop:.2f}pp on the "
+            f"gross side (first-year net range {fy_n.min():.2f}-{fy_n.max():.2f}%)"
+        )
+    else:
+        net_clause = (
+            f"while net NPA has come down to {n.iloc[-1]:.2f}% from {n.iloc[0]:.2f}% "
+            f"(first-year range {fy_n.min():.2f}-{fy_n.max():.2f}%)"
+        )
     div.discovery = (
-        f"{company}'s headline asset quality looks healed -- gross NPA has fallen from its "
-        f"{g.max():.2f}% peak ({qlabel(peak_g_q)}) to {g.iloc[-1]:.2f}% ({qlabel(last_q)}) -- but the "
-        f"cushion underneath it has thinned for {div.persistence} straight quarters: the provision "
-        f"coverage implied by the bank's own GNPA/NNPA pair has slid from {pcr.iloc[0]:.1f}% "
-        f"({qlabel(first_q)}) to {pcr.iloc[-1]:.1f}% ({qlabel(last_q)}), while net NPA, at "
-        f"{n.iloc[-1]:.2f}%, is still higher than in every quarter of the first panel year "
-        f"({n.iloc[:4].min():.2f}-{n.iloc[:4].max():.2f}%). Over the full panel the gross ratio "
-        f"is down {g.iloc[0] - g.iloc[-1]:.2f}pp while the net ratio has not fallen at all "
-        f"({n.iloc[0]:.2f}% then, {n.iloc[-1]:.2f}% now) -- the improvement is real, but it is "
-        f"being carried partly by a thinner buffer, not only by cleaner loans."
+        f"{company}'s headline asset quality looks healed -- gross NPA is down from "
+        f"{g.iloc[0]:.2f}% ({qlabel(first_q)}; panel peak {g.max():.2f}% in "
+        f"{qlabel(peak_g_q)}) to {g.iloc[-1]:.2f}% ({qlabel(last_q)}) -- but the cushion "
+        f"underneath it has thinned: the provision coverage implied by the bank's own "
+        f"GNPA/NNPA pair has spent {div.persistence} straight quarters below its "
+        f"early-panel band, sliding from {pcr.iloc[0]:.1f}% to {pcr.iloc[-1]:.1f}%, "
+        f"{net_clause}. The gross improvement is real; part of it is being carried by "
+        f"a thinner buffer, not only by cleaner loans."
     )
+    if n.iloc[-1] <= n.min() + 1e-9:
+        nnpa_rank = "the lowest net NPA reading of the panel"
+    elif n.iloc[-1] <= n.median():
+        nnpa_rank = "a net NPA reading in the lower half of the panel range"
+    else:
+        nnpa_rank = "a net NPA reading still in the upper half of the panel range"
     div.why_it_matters = [
-        "Provision coverage is the shock absorber between slippages and the P&L: at "
-        f"{pcr.iloc[-1]:.1f}% implied coverage instead of ~{pcr.iloc[0]:.0f}%, each new rupee of "
-        "stress needs roughly a third more fresh provisioning to hold net NPA where it is.",
-        "Headline GNPA is the number most trackers anchor on. The GNPA/NNPA pair tells a "
-        "different, quieter story -- gross stress fell from its peak, yet the *net* bad-loan "
-        f"ratio ({n.iloc[-1]:.2f}%) has not returned to its early-panel range, and filing "
-        "coverage of the latest quarter shows the absolute net NPA stock still rising "
-        "year-on-year even as the gross stock shrinks.",
-        "Credit costs are currently flattering earnings: provisions in the latest quarter "
-        "were a fraction of the year-ago quarter's. If slippages merely normalise, the bank "
-        "must choose between rebuilding coverage (a P&L drag) and letting net NPA climb "
-        "(a headline it has spent three years avoiding).",
-        "The drift is slow and persistent rather than a one-quarter event -- "
-        f"implied coverage has been below its early-panel band for {div.persistence} "
+        "Provision coverage is the shock absorber between slippages and the P&L. The "
+        f"uncovered share of gross stress has risen from {unc_first:.1f}% to "
+        f"{unc_last:.1f}% of GNPA: of every Rs 100 of new gross stress, Rs "
+        f"{unc_last:.0f} now lands on the P&L uncovered, against Rs {unc_first:.0f} at "
+        "the start of the panel.",
+        "Headline GNPA is the number most trackers anchor on. The GNPA/NNPA pair tells "
+        f"a quieter story: the latest quarter pairs {nnpa_rank} ({n.iloc[-1]:.2f}%, "
+        f"first-year range {fy_n.min():.2f}-{fy_n.max():.2f}%, panel peak "
+        f"{n.max():.2f}% in {qlabel(peak_n_q)}) with the panel's thinnest implied "
+        "coverage -- the stock of protection per rupee of bad loans is at its low "
+        "exactly when the headline looks its best.",
+        "Coverage this thin embeds a choice about future earnings. If slippages merely "
+        "normalise, the bank must either rebuild coverage (a direct P&L drag, quarter "
+        "after quarter) or let net NPA climb (the headline it has spent years "
+        "improving). Either path reprices the earnings quality the market currently "
+        "capitalises.",
+        "The drift is slow and persistent rather than a one-quarter event -- implied "
+        f"coverage has been below its early-panel band for {div.persistence} "
         "consecutive quarters -- which makes it a structural balance-sheet choice, "
         "not provisioning noise.",
     ]
     div.counterargument = (
-        "The strongest alternative reading is mix and mechanics, not hidden stress. The "
-        "merged book is heavily secured (mortgages, LAP, auto), where expected loss-given-"
-        "default is low and a lower coverage ratio is economically rational; technical "
-        "write-offs of fully-provided legacy accounts mechanically compress both GNPA and "
-        "the implied coverage without any new stress; and the bank holds floating and "
-        "contingent provisions outside this ratio -- the Mar-2024 quarter's expense spike "
-        "in the panel (Rs "
-        f"{panel['expenses'].loc[pd.Timestamp('2024-03-31')]:,.0f} crore) is the visible "
-        "footprint of that buffer-building. On this reading, 0.41% net NPA remains among "
-        "the lowest of any large Indian bank, GNPA excluding the seasonal agriculture book "
-        "was 0.91% in the latest filing, and the 'thinning cushion' is an accounting "
-        "artefact of a safer book. The MVP cannot fully separate mix from stress with "
-        "public quarterly data alone -- which is why the finding is graded Moderate, "
-        "not Strong."
+        "The strongest alternative reading is mix and mechanics, not hidden stress. A "
+        "book weighted toward secured lending (mortgages, LAP, auto and other "
+        "collateralised retail) carries low expected loss-given-default, so a lower "
+        "coverage ratio can be economically rational; technical write-offs of "
+        "fully-provided legacy accounts mechanically compress both GNPA and the implied "
+        "coverage without any new stress; and banks of this profile typically also "
+        "hold floating and contingent provisions outside this ratio, which the pair "
+        "cannot see. On this reading the 'thinning cushion' is an accounting artefact "
+        "of a safer, more secured book, and the latest quarter still shows "
+        f"{nnpa_rank} ({n.iloc[-1]:.2f}%). The pipeline cannot fully separate mix from "
+        "stress with public quarterly data alone -- which is why the finding is not "
+        "graded Strong."
     )
     div.falsification = (
         "This finding is retired if, for two consecutive quarters, implied provision "
-        "coverage rises back to >= 70% while GNPA stays <= 1.25% (the buffer is being "
-        "rebuilt), OR net NPA falls to <= 0.35% with GNPA stable or falling (net stress "
-        "genuinely clearing). It is also retired if the bank discloses that the coverage "
-        "decline is wholly explained by technical write-offs of 100%-provided accounts "
-        "whose recoveries are tracking at or above LGD assumptions."
+        f"coverage rises back to >= {early_pcr:.0f}% (its early-panel average) while "
+        f"GNPA stays at or below {g.iloc[-1]:.2f}% (the buffer is being rebuilt), OR "
+        f"net NPA reaches a new panel low (<= {n.min():.2f}%) while implied coverage is "
+        "flat or rising for two consecutive quarters (net stress genuinely clearing "
+        "without thinning the buffer). It is also retired if the bank discloses that "
+        "the coverage decline is wholly explained by technical write-offs of "
+        "100%-provided accounts whose recoveries are tracking at or above LGD "
+        "assumptions."
     )
-    rows = [
-        (qlabel(first_q), f"Panel opens on the merged entity: GNPA {g.iloc[0]:.2f}%, NNPA {n.iloc[0]:.2f}%, implied coverage {pcr.iloc[0]:.1f}%."),
-        (qlabel(peak_g_q), f"GNPA peaks at {g.max():.2f}%. Implied coverage has already crossed below its early-panel band (change-point: {qlabel(div.change_point) if div.change_point is not None else 'n/a'}) and never returns."),
-        (qlabel(peak_n_q), f"Net NPA peaks at {n.max():.2f}% even as the gross ratio is already off its high -- the pair visibly decouples."),
-        (qlabel(last_q), f"Latest quarter: GNPA {g.iloc[-1]:.2f}%, NNPA {n.iloc[-1]:.2f}%, implied coverage {pcr.iloc[-1]:.1f}% -- a {div.persistence}-quarter run below the band."),
+    entries = [
+        (first_q, f"Panel opens: GNPA {g.iloc[0]:.2f}%, NNPA {n.iloc[0]:.2f}%, implied coverage {pcr.iloc[0]:.1f}%."),
+        (peak_g_q, f"GNPA peaks at {g.max():.2f}% and turns down from there."),
+        (peak_n_q, f"Net NPA peaks at {n.max():.2f}% -- the net ratio's high does not coincide with sustained coverage; the pair visibly decouples."),
     ]
+    if div.change_point is not None:
+        entries.append((
+            div.change_point,
+            f"Change-point: implied coverage crosses below its early-panel band and "
+            f"stays below it for the rest of the panel (a run of {div.persistence} quarters).",
+        ))
+    entries.append((
+        last_q,
+        f"Latest quarter: GNPA {g.iloc[-1]:.2f}%, NNPA {n.iloc[-1]:.2f}%, implied coverage {pcr.iloc[-1]:.1f}% -- a {div.persistence}-quarter run below the band.",
+    ))
     seen, tl = set(), []
-    for q, txt in rows:
-        if q not in seen:
-            tl.append((q, txt))
-            seen.add(q)
+    for ts, txt in sorted(entries, key=lambda e: e[0]):
+        if ts not in seen:
+            tl.append((qlabel(ts), txt))
+            seen.add(ts)
     div.timeline = tl
     return div
 
 
 def _narrate_growth_gap(panel: pd.DataFrame, div: Divergence, company: str) -> Divergence:
     gap = div.gap
+    flagged = [qlabel(ts) for ts in panel.index[panel["one_off_flag"]]]
+    flagged_txt = (
+        f" Quarters the engine flags as one-off-contaminated in this panel: "
+        f"{', '.join(flagged)} -- they are excluded as persistence evidence."
+        if flagged else
+        " No quarter in this panel is one-off-flagged, so the run is on clean quarters throughout."
+    )
     div.discovery = (
         f"{company}'s profit line has decoupled from its top line: over the flagged window the "
         f"gap between net-profit YoY growth and revenue (interest income) YoY growth ran at "
@@ -254,18 +310,20 @@ def _narrate_growth_gap(panel: pd.DataFrame, div: Divergence, company: str) -> D
     div.why_it_matters = [
         "Growth bought with spread relief and one-off items is lower-quality than growth "
         "bought with loan-book expansion; the two have very different persistence.",
-        "The revenue stall is partly a deliberate, pre-announced balance-sheet repair "
-        "(credit-deposit ratio normalisation), so the market may be under-pricing how much "
-        "of the profit growth is the *reward* for that repair rather than franchise growth.",
+        "A profit line outgrowing its revenue line cannot compound indefinitely: the "
+        "gap must eventually close from one side or the other, and which side moves "
+        "decides whether the current earnings multiple is cheap or a trap.",
         "If funding relief fades before loan growth returns, both lines can stall together.",
     ]
     div.counterargument = (
-        "Profit growth inside the window is flattered by identifiable one-offs (a stake-sale "
-        "gain in other income in Jun-2025; provisions normalising from an elevated year-ago "
-        "base), and average advances still grew double-digit year-on-year in the latest "
-        "filing -- the 'stall' is in the interest-income line's mix and yields, not in the "
-        "balance sheet. The divergence may therefore be a transition artefact of the merger "
-        "repair programme, fully visible to anyone reading the presentations."
+        "Part of the gap can be mechanical rather than economic. YoY windows straddle "
+        "quarters whose expense or other-income lines are outliers (provision builds, "
+        f"stake-sale gains, treasury swings), and profit growth off a low base flatters "
+        f"the comparison.{flagged_txt} Balance-sheet growth (advances, deposits) is not "
+        "in this pair at all, so a deliberate mix shift -- slower low-yield lending, "
+        "faster fee businesses -- can widen the gap with no earnings-quality problem "
+        "behind it. The divergence may therefore be a transition artefact, fully "
+        "visible to anyone reading the filings."
     )
     div.falsification = (
         "Retired if revenue YoY growth meets or exceeds net-profit YoY growth for two "
@@ -273,7 +331,7 @@ def _narrate_growth_gap(panel: pd.DataFrame, div: Divergence, company: str) -> D
         "again carried by the top line."
     )
     div.timeline = [
-        (qlabel(gap.index[0]), f"First clean post-merger YoY window: growth gap {gap.iloc[0]:+.1f}pp."),
+        (qlabel(gap.index[0]), f"First clean YoY window (a full year of panel history): growth gap {gap.iloc[0]:+.1f}pp."),
         (qlabel(div.change_point) if div.change_point is not None else "-", "Gap crosses the +3pp band on clean (non-one-off) quarters."),
         (qlabel(gap.index[-1]), f"Latest quarter: growth gap {gap.iloc[-1]:+.1f}pp."),
     ]
@@ -287,15 +345,16 @@ def _narrate_spread(panel: pd.DataFrame, div: Divergence, company: str) -> Diver
         f"{s.iloc[-1]:.1f}% of interest income in the latest quarter, down from a "
         f"{s.iloc[:4].mean():.1f}% plateau in the first panel year -- a "
         f"{div.persistence}-quarter run below the band that is quietly rebuilding the "
-        "spread the merger diluted."
+        "spread the balance sheet used to carry."
     )
     div.why_it_matters = [
         "For a bank of this size, each 1pp of interest burden is worth roughly 1% of "
         "interest income straight into net interest income -- the relief is a first-order "
         "earnings driver, larger than most cost programmes.",
-        "The relief coincides with deposit growth outpacing the inherited wholesale "
-        "borrowings (annual funding mix in the panel pack), i.e. it is funded by franchise "
-        "deposits rather than market luck alone.",
+        "Whether the relief is franchise-funded or merely market-given shows up in the "
+        "annual funding mix printed in this note (borrowings as a share of deposits): "
+        "relief funded by compounding deposits persists; relief rented from the rate "
+        "cycle does not.",
     ]
     div.counterargument = (
         "Deposit repricing lags policy-rate cuts across the whole sector, so part of the "
@@ -305,8 +364,9 @@ def _narrate_spread(panel: pd.DataFrame, div: Divergence, company: str) -> Diver
         "while this burden improves."
     )
     div.falsification = (
-        "Retired if the interest burden returns to >= 59% of interest income for two "
-        "consecutive quarters while policy rates are broadly unchanged."
+        f"Retired if the interest burden returns to >= {s.iloc[:4].mean():.0f}% of "
+        "interest income (its early-panel plateau) for two consecutive quarters while "
+        "policy rates are broadly unchanged."
     )
     div.timeline = [
         (qlabel(s.index[0]), f"Burden at {s.iloc[0]:.1f}% in the first merged quarter."),

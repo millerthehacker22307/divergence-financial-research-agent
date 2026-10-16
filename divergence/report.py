@@ -24,9 +24,22 @@ RED = "#9e2b25"
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 
 
+def _band_for(div: Divergence) -> tuple[float, str]:
+    """The break band of the winning pair, mirroring the detectors in
+    engine.py: coverage / burden pairs break *below* early-mean minus a
+    margin; the growth-gap pair breaks *above* +3pp."""
+    gap = div.gap
+    if div.pair_id == "growth_gap":
+        return 3.0, "above"
+    if div.pair_id == "spread_relief":
+        return float(gap.iloc[:4].mean()) - 1.0, "below"
+    return float(gap.iloc[:4].mean()) - 3.0, "below"
+
+
 def make_chart(panel: pd.DataFrame, div: Divergence, out_png: Path) -> Path:
     labels = [qlabel(ts) for ts in panel.index]
-    x = range(len(panel))
+    x = list(range(len(panel)))
+    pos = {ts: i for i, ts in enumerate(panel.index)}
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.4, 3.9), sharex=True,
                                    gridspec_kw={"hspace": 0.12, "height_ratios": [1, 1]})
     ax1.plot(x, panel["gnpa_pct"], marker="o", ms=3.5, lw=1.8, color=NAVY, label="Gross NPA %")
@@ -35,24 +48,26 @@ def make_chart(panel: pd.DataFrame, div: Divergence, out_png: Path) -> Path:
     ax1.legend(fontsize=7.5, frameon=False, loc="upper right")
     ax1.grid(alpha=0.25, lw=0.5)
     ax1.tick_params(labelsize=7.5)
-    ax1.set_title("The pair that broke: gross vs net NPA, and the coverage implied by them",
+    ax1.set_title(f"Winning divergence: {div.title}",
                   fontsize=9.5, color=NAVY, loc="left", weight="bold")
 
-    pcr = panel["implied_pcr_pct"]
-    band = pcr.iloc[:4].mean() - 3.0
-    ax2.plot(x, pcr, marker="o", ms=3.5, lw=1.8, color=GOLD, label="Implied provision coverage %")
-    ax2.axhline(band, color=RED, lw=1.1, ls="--", label=f"Early-panel band ({band:.1f}%)")
-    ax2.fill_between(x, pcr, band, where=(pcr < band), color=RED, alpha=0.13)
-    if div.change_point is not None and div.change_point in panel.index:
-        cp = list(panel.index).index(div.change_point)
+    gap = div.gap
+    gx = [pos[ts] for ts in gap.index]
+    band, direction = _band_for(div)
+    ax2.plot(gx, gap.values, marker="o", ms=3.5, lw=1.8, color=GOLD, label=div.gap_name)
+    ax2.axhline(band, color=RED, lw=1.1, ls="--", label=f"Break band ({band:.1f})")
+    beyond = (gap > band) if direction == "above" else (gap < band)
+    ax2.fill_between(gx, gap.values, band, where=beyond.values, color=RED, alpha=0.13)
+    if div.change_point is not None and div.change_point in pos:
+        cp = pos[div.change_point]
         ax2.axvline(cp, color=RED, lw=0.9, ls=":")
-        ax2.annotate("change-point", (cp, pcr.min()), fontsize=7.5, color=RED,
-                     xytext=(cp + 0.15, pcr.min() + 1.2))
-    ax2.set_ylabel("Implied PCR (%)", fontsize=8)
-    ax2.legend(fontsize=7.5, frameon=False, loc="lower left")
+        ax2.annotate("change-point", (cp, float(gap.min())), fontsize=7.5, color=RED,
+                     xytext=(cp + 0.15, float(gap.min()) + 0.06 * (float(gap.max()) - float(gap.min()) + 1e-9)))
+    ax2.set_ylabel(div.gap_name, fontsize=7.5)
+    ax2.legend(fontsize=7.5, frameon=False, loc="best")
     ax2.grid(alpha=0.25, lw=0.5)
     ax2.tick_params(labelsize=7.5)
-    ax2.set_xticks(list(x))
+    ax2.set_xticks(x)
     ax2.set_xticklabels(labels, rotation=38, ha="left", fontsize=7)
     fig.savefig(out_png, dpi=200, bbox_inches="tight")
     plt.close(fig)

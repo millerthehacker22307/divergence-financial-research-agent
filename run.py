@@ -58,7 +58,7 @@ def main() -> int:
     else:
         log(f"  price cross-check unavailable: {yahoo.note}")
 
-    log("Stage 2/6 PANEL — post-merger window, derived metrics, one-off flags")
+    log("Stage 2/6 PANEL — most recent 12 quarters, derived metrics, one-off flags")
     panel = panel_mod.build_panel(sa.quarterly)
     log(f"  panel: {len(panel)} quarters, {engine.qlabel(panel.index[0])} .. {engine.qlabel(panel.index[-1])}")
     flagged = [engine.qlabel(ts) for ts in panel.index[panel['one_off_flag']]]
@@ -79,7 +79,10 @@ def main() -> int:
     div = engine.narrate(panel, div, args.name)
 
     log("Stage 5/6 EVIDENCE — claim-level trail + strength grading")
-    rows = ev.build_evidence(args.name, args.scrip, panel, yahoo.note, last_close)
+    rows = ev.build_evidence(
+        args.name, args.scrip, args.ticker, panel,
+        sa.quarterly, cons.quarterly, yahoo.note, last_close,
+    )
     classes = ev.evidence_classes(rows)
     strength, strength_reason = engine.grade(div.persistence, classes)
     log(f"  evidence rows: {len(rows)}; independent source classes: {sorted(classes)}")
@@ -92,8 +95,7 @@ def main() -> int:
     funding = panel_mod.funding_mix(sa.annual_bs)
     funding_rows = [
         {"year": ts.strftime("Mar %Y"), "ratio": f"{r['borrowings_per_deposit_pct']:.1f}"}
-        for ts, r in funding.iterrows()
-        if ts >= pd_ts("2023-03-31")
+        for ts, r in funding.tail(4).iterrows()
     ]
     chart_name = f"chart_{args.scrip}.png"
     report.make_chart(panel, div, out / chart_name)
@@ -143,12 +145,6 @@ def main() -> int:
 
     (out / "run_log.txt").write_text("\n".join(LOG_LINES) + "\n", encoding="utf-8")
     return 0
-
-
-def pd_ts(s: str):
-    import pandas as pd
-
-    return pd.Timestamp(s)
 
 
 if __name__ == "__main__":

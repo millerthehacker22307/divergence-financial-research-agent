@@ -77,7 +77,7 @@
 {% endif %}
 {% if funding %}
 <p class="small"><b>Funding-mix context (annual, Screener balance sheet):</b>
-{% for f in funding %}{{ f.year }}: borrowings were {{ f.ratio }}% of deposits{% if not loop.last %}; {% endif %}{% endfor %} — the inherited wholesale funding of the merger is being worked down as deposits compound.</p>
+{% for f in funding %}{{ f.year }}: borrowings were {{ f.ratio }}% of deposits{% if not loop.last %}; {% endif %}{% endfor %} — borrowings as a share of deposits across the most recent fiscal years; a falling share means growth is being funded by the deposit franchise rather than wholesale borrowing.</p>
 {% endif %}
 
 <h2><span class="n">3</span>&nbsp; TIMELINE — WHEN THE RELATIONSHIP BROKE</h2>
@@ -101,7 +101,7 @@
 <h2><span class="n">6</span>&nbsp; FALSIFICATION CONDITION</h2>
 <div class="box fals"><p style="margin:0">{{ falsification }}</p></div>
 
-<div class="foot"><b>Method &amp; scope (MVP):</b> one pipeline run on one Track A company, produced end-to-end by the code in this repository — panel built from public Screener.in renders of the statutory results (standalone basis; the Jun-2023 pre-merger quarter is excluded as a structural break), cross-checked against independent filing coverage; Yahoo Finance price history is fetched as market context only. The full system (filing-PDF parsing, peer panel, every Track A company) is the finals build described in the Round 1 report. All figures are reproducible from the committed panel CSV. This note is a research hypothesis with a stated falsification condition — <b>not investment advice</b>.</div>
+<div class="foot"><b>Method &amp; scope (MVP):</b> one pipeline run on one Track A company, produced end-to-end by the code in this repository — panel built from public Screener.in renders of the statutory results (standalone basis; the panel is the most recent 12 quarters, with one-off-contaminated quarters flagged mechanically), cross-checked against independent filing coverage; Yahoo Finance price history is fetched as market context only. The full system (filing-PDF parsing, peer panel, every Track A company) is the finals build described in the Round 1 report. All figures are reproducible from the committed panel CSV. This note is a research hypothesis with a stated falsification condition — <b>not investment advice</b>.</div>
 
 </body>
 </html>

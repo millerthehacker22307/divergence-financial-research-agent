@@ -59,7 +59,13 @@ def main() -> int:
         log(f"  price cross-check unavailable: {yahoo.note}")
 
     log("Stage 2/6 PANEL — most recent 12 quarters, derived metrics, one-off flags")
-    panel = panel_mod.build_panel(sa.quarterly)
+    try:
+        panel = panel_mod.build_panel(sa.quarterly)
+    except panel_mod.LensNotCoveredError as exc:
+        log(f"  LENS NOT COVERED — {exc}")
+        log("  No note produced. Run a bank/NBFC scrip live instead and "
+            "present this gap as the roadmap item it is.")
+        return 2
     log(f"  panel: {len(panel)} quarters, {engine.qlabel(panel.index[0])} .. {engine.qlabel(panel.index[-1])}")
     flagged = [engine.qlabel(ts) for ts in panel.index[panel['one_off_flag']]]
     log(f"  one-off-flagged quarters: {', '.join(flagged) if flagged else 'none'}")

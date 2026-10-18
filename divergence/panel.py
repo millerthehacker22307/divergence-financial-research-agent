@@ -33,8 +33,29 @@ COLMAP = {
 }
 
 
+class LensNotCoveredError(Exception):
+    """Raised when a scrip's Screener table lacks the bank-lens columns.
+
+    Insurers (e.g. HDFC Life, SBI Life) report no interest-expense /
+    GNPA / NNPA lines, so the banking divergence lens cannot apply.
+    The entry point catches this and exits with a clean message
+    instead of a traceback (FINALS_PREP Risk #4).
+    """
+
+
+REQUIRED_COLUMNS = ("revenue", "interest_expense", "net_profit", "gnpa_pct", "nnpa_pct")
+
+
 def build_panel(standalone_quarterly: pd.DataFrame) -> pd.DataFrame:
     q = standalone_quarterly.rename(columns=COLMAP)
+    missing = [c for c in REQUIRED_COLUMNS if c not in q.columns]
+    if missing:
+        raise LensNotCoveredError(
+            "bank lens not covered for this scrip — missing Screener columns: "
+            + ", ".join(missing)
+            + ". This lens covers banks and NBFCs that report GNPA/NNPA; "
+            "insurers do not, so no note can be computed honestly."
+        )
     keep = [c for c in COLMAP.values() if c in q.columns]
     panel = q[keep].copy()
     panel = panel.sort_index().tail(PANEL_QUARTERS)
